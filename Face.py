@@ -1,6 +1,7 @@
 import face_recognition
 import cv2
 import time
+from FaceAlignment import *
 
 
 def read_video(video_name):
@@ -22,6 +23,7 @@ def parse_video():
     for index in range(1, 331):
         file_name = './test/' + str(index).rjust(3, '0') + '.jpg'
         _face_landmarks_dict = parse_pic(file_name)
+        get_pose(file_name)
         draw_pic(_face_landmarks_dict, file_name)
 
 
@@ -38,6 +40,7 @@ def draw_pic(face_landmarks_dict, file_name):
     white = (255, 255, 255)
     values = list(face_landmarks_dict.values())
     # print(values)
+    img = cv2.imread(file_name.split('.jpg')[0] + '_after.jpg')
     for each in values:
         for i in range(len(each) - 1):
             cv2.line(img, each[i], each[i + 1], white, 1)
@@ -46,8 +49,6 @@ def draw_pic(face_landmarks_dict, file_name):
     # print(file_name)
     cv2.imwrite(file_name.split('.jpg')[0] + '_after.jpg', img)
     # cv2.waitKey(0)
-
-
 
 
 
@@ -63,13 +64,48 @@ def make_video(cap):
         video_writer.write(img)
     cap.release()
 
+def get_pose(file_name):
+    im=cv2.imread(file_name)
+    size=im.shape
+    if size[0] > 700:
+        h = size[0] / 3
+        w = size[1] / 3
+        im = cv2.resize(im, (int(w), int(h)), interpolation=cv2.INTER_CUBIC)
+        size = im.shape
+    ret, image_points = get_image_points(im)
+    if ret != 0:
+        print('get_image_points failed')
+        return
+
+    ret, rotation_vector, translation_vector, camera_matrix, dist_coeffs = get_pose_estimation(size, image_points)
+    if ret != True:
+        print('get_pose_estimation failed')
+        return
+    ret, pitch, yaw, roll = get_euler_angle(rotation_vector)
+    euler_angle_str = 'Y:{}, X:{}, Z:{}'.format(pitch, yaw, roll)
+
+    # Project a 3D point (0, 0, 1000.0) onto the image plane.
+    # We use this to draw a line sticking out of the nose
+
+    (nose_end_point2D, jacobian) = cv2.projectPoints(np.array([(0.0, 0.0, 1000.0)]), rotation_vector,
+                                                     translation_vector, camera_matrix, dist_coeffs)
+    for p in image_points:
+        cv2.circle(im, (int(p[0]), int(p[1])), 3, (0, 0, 255), -1)
+
+    p1 = (int(image_points[0][0]), int(image_points[0][1]))
+    p2 = (int(nose_end_point2D[0][0][0]), int(nose_end_point2D[0][0][1]))
+
+    cv2.line(im, p1, p2, (255, 0, 0), 2)
+    cv2.imwrite(file_name.split('.jpg')[0] + '_after.jpg', im)
+
+
 if __name__ == '__main__':
     '''
     image = face_recognition.load_image_file(file_name)
     t1=time.time()
     face_landmarks_list = face_recognition.face_landmarks(image)
     t2=time.time()
-    print('cost is {}s.'.format(t2-t1))
+    print('cost is {}s.'.format(t2-t1)) # cost is about 0.5s
     print(face_landmarks_list)
     face_landmarks_dict=face_landmarks_list[0]
     '''
@@ -78,7 +114,6 @@ if __name__ == '__main__':
     parse_video()
     make_video(cap)
 
-    # draw_pic(face_landmarks_dict)
     '''
     [{'chin': [(67, 51), (67, 58), (67, 64), (67, 70), (69, 76), (72, 80), (77, 84), (83, 87), (89, 89), (95, 89),
                (100, 87), (104, 83), (107, 79), (109, 74), (110, 69), (111, 64), (112, 59)],
@@ -93,9 +128,6 @@ if __name__ == '__main__':
       'bottom_lip': [(100, 75), (96, 76), (94, 76), (91, 75), (88, 75), (85, 74), (82, 72), (83, 72), (89, 72),
                      (91, 73), (94, 73), (98, 75)]}]
     '''
-    # [{'nose_tip': [(476, 201)], 'left_eye': [(455, 175), (469, 178)], 'right_eye': [(505, 176), (489, 178)]}]
-
-    # [[(476, 201)], [(455, 175), (469, 178)], [(505, 176), (489, 178)]]
     '''
     face_loca = [i for i in face_locations[0].values()]
     print(face_loca)
@@ -109,3 +141,4 @@ if __name__ == '__main__':
     cv2.imshow("Image", img)
     cv2.waitKey(0)
     '''
+
